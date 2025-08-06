@@ -1,6 +1,6 @@
 'use client';
 
-import { Eye, Trash } from "lucide-react";
+import { Eye, Play, Trash } from "lucide-react";
 import Link from "next/link";
 import { Button } from "~/components/ui/button";
 import { api } from "~/trpc/react";
@@ -13,6 +13,7 @@ export default function FilesPage() {
       await utils.media.getFiles.invalidate();
     },
   });
+  const play = api.player.play.useMutation()
   return (
     <ul className="p-4 space-y-2">
       {files.data?.map((file) => (
@@ -22,6 +23,12 @@ export default function FilesPage() {
             <Link href={`/file/${file.id}`} target="_blank">
               <Button size="icon" variant="secondary"><Eye /></Button>
             </Link>
+            <Button
+              size="icon"
+              onClick={() => play.mutate({ id: file.id })}
+              disabled={play.isPending}>
+              <Play />
+            </Button>
             <Button
               size="icon"
               variant="destructive"

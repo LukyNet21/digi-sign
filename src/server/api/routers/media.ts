@@ -58,6 +58,21 @@ export const mediaRouter = createTRPCRouter({
 
       return posts 
     }),
+  getFile: publicProcedure
+    .input(z.object({
+      id: z.number(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const file = await ctx.db.query.files.findFirst({
+        where: eq(files.id, input.id),
+      });
+
+      if (!file) {
+        throw new Error('File not found');
+      }
+
+      return file;
+    }),
   deleteFile: publicProcedure
     .input(z.object({
       id: z.number(),
