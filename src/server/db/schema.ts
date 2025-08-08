@@ -30,7 +30,7 @@ export const files = createTable(
   'file',
   (d) => ({
     id: d.integer({ mode: 'number' }).primaryKey({ autoIncrement: true }),
-    name: d.text({ length: 256 }).notNull(), 
+    name: d.text({ length: 256 }).notNull(),
     fileName: d.text({ length: 256 }).notNull(), // original filename
     path: d.text().notNull(),
     mimeType: d.text().notNull(),
@@ -44,4 +44,52 @@ export const files = createTable(
       .$onUpdate(() => new Date()),
   }),
   (t) => [index('file_name_idx').on(t.name)],
+);
+
+export const playlists = createTable(
+  'playlist',
+  (d) => ({
+    id: d.integer({ mode: 'number' }).primaryKey({ autoIncrement: true }),
+    name: d.text({ length: 256 }).notNull(),
+    description: d.text({ length: 1024 }),
+    createdAt: d
+      .integer({ mode: 'timestamp' })
+      .default(sql`(unixepoch())`)
+      .notNull(),
+    updatedAt: d
+      .integer({ mode: 'timestamp' })
+      .$onUpdate(() => new Date()),
+  }),
+  (t) => [index('playlist_name_idx').on(t.name)],
+);
+
+export const playlistItems = createTable(
+  'playlist_item',
+  (d) => ({
+    id: d.integer({ mode: 'number' }).primaryKey({ autoIncrement: true }),
+    playlistId: d
+      .integer({ mode: 'number' })
+      .notNull()
+      .references(() => playlists.id, { onDelete: 'cascade' }),
+    fileId: d
+      .integer({ mode: 'number' })
+      .notNull()
+      .references(() => files.id, { onDelete: 'cascade' }),
+    position: d.integer({ mode: 'number' }).notNull().default(0),
+    imageDisplayDurationMs: d.integer({ mode: 'number' }),
+    pdfPageDurationMs: d.integer({ mode: 'number' }),
+    pdfDocumentLoopCount: d.integer({ mode: 'number' }),
+    videoLoopCount: d.integer({ mode: 'number' }),
+    createdAt: d
+      .integer({ mode: 'timestamp' })
+      .default(sql`(unixepoch())`)
+      .notNull(),
+    updatedAt: d
+      .integer({ mode: 'timestamp' })
+      .$onUpdate(() => new Date()),
+  }),
+  (t) => [
+    index('playlist_item_playlist_idx').on(t.playlistId),
+    index('playlist_item_playlist_position_idx').on(t.playlistId, t.position),
+  ],
 );

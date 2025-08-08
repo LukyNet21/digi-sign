@@ -1,4 +1,4 @@
-import { Files, Upload } from "lucide-react"
+import { Files, Upload, ListVideo } from "lucide-react"
 import Link from "next/link"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger } from "~/components/ui/sidebar"
 const items = [
@@ -11,6 +11,11 @@ const items = [
     title: "Files",
     url: "/admin/files",
     icon: Files,
+  },
+  {
+    title: "Playlists",
+    url: "/admin/playlists",
+    icon: ListVideo,
   },
 ]
 export default function Layout({ children }: { children: React.ReactNode }) {
