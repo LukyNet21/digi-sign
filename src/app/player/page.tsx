@@ -2,7 +2,7 @@
 
 import { api } from "~/trpc/react";
 import dynamic from 'next/dynamic';
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const DisplayPDF = dynamic(() => import('~/components/display-pdf'), {
   ssr: false,
@@ -17,117 +17,125 @@ export default function Player() {
   });
   const playerData = subscription.data?.data;
 
-  const fileQuery = api.media.getFile.useQuery(
+  const playlistQuery = api.playlist.get.useQuery(
     { id: playerData?.id ?? 0 },
     { enabled: !!playerData?.id }
   );
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [loopCounter, setLoopCounter] = useState(0); // for playlist video loops
 
+  // Reset index when playlist changes
   useEffect(() => {
-    if (!playerData || !fileQuery.data) return
-
-    if (fileQuery.data.mimeType.startsWith('video/') && videoRef.current) {
-      const video = videoRef.current;
-      const startPlayback = () => {
-        if (Date.now() < playerData.startTime) {
-          setTimeout(() => {
-            video.play().catch(e => {
-              console.error("Video play error: " + e)
-            });
-          }, playerData.startTime - Date.now());
-        } else {
-          const elapsedSeconds = (Date.now() - playerData.startTime) / 1000;
-          const targetTime = elapsedSeconds % video.duration;
-          video.currentTime = targetTime;
-          if (video.readyState >= 3) {
-            video.play().catch(e => {
-              console.error("Video play error: " + e)
-            });
-          } else {
-            video.addEventListener('canplay', () => {
-              video.play().catch(e => {
-                console.error("Video play error: " + e)
-              });
-            }, { once: true });
-          }
-        }
-      };
-      if (video.readyState >= 1) {
-        startPlayback();
-      } else {
-        video.addEventListener('loadedmetadata', startPlayback, { once: true });
-      }
+    if (playlistQuery.data) {
+      setCurrentIndex(0);
+      setLoopCounter(0);
     }
+  }, [playlistQuery.data]);
 
-  }, [playerData, fileQuery.data])
+  const currentItem = playlistQuery.data?.items[currentIndex];
+  const currentFile = currentItem?.file;
+
+  // Timer for images
+  useEffect(() => {
+    if (!currentItem || !currentFile) return;
+    if (!currentFile.mimeType.startsWith('image/')) return;
+    const duration = currentItem.imageDisplayDurationMs ?? 5000;
+    const t = setTimeout(() => {
+      setCurrentIndex((i) => {
+        const len = playlistQuery.data?.items.length ?? 0;
+        return len > 0 ? (i + 1) % len : 0;
+      });
+    }, Math.max(500, duration));
+    return () => clearTimeout(t);
+  }, [currentIndex, currentItem, currentFile, playlistQuery.data]);
+
+  // Reset video loop counter when playlist item changes
+  useEffect(() => {
+    if (playlistQuery.data) setLoopCounter(0);
+  }, [currentIndex, playlistQuery.data]);
 
   if (!playerData) {
     return <div>Waiting for content...</div>;
   }
 
+  if (playlistQuery.data) {
+    const pl = playlistQuery.data;
+    const item = pl.items[currentIndex];
 
-  if (fileQuery.isLoading) {
-    return <div>Loading file...</div>;
-  }
+  if (!item?.file) {
+      return <div>Playlist empty</div>;
+    }
 
-  if (fileQuery.error) {
-    return <div>Error loading file: {fileQuery.error.message}</div>;
-  }
+    const file = item.file;
+    const next = () => setCurrentIndex((i) => (i + 1) % pl.items.length);
 
-  if (!fileQuery.data) {
-    return <div>File not found</div>;
-  }
+    if (file.mimeType.startsWith('image/')) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen">
+          <img
+            src={`/file/${file.id}`}
+            alt={file.name}
+            className="max-w-full max-h-screen object-contain"
+          />
+        </div>
+      );
+    }
 
-  const file = fileQuery.data;
+    if (file.mimeType.startsWith('video/')) {
+      const loops = item.videoLoopCount ?? 1;
+      const onEnded = () => {
+        const newCount = loopCounter + 1;
+        if (newCount >= Math.max(1, loops)) {
+          setLoopCounter(0);
+          next();
+        } else {
+          setLoopCounter(newCount);
+          if (videoRef.current) {
+            videoRef.current.currentTime = 0;
+            videoRef.current.play().catch((e) => { console.error("Video play error:" + e) });
+          }
+        }
+      };
 
-  // Check if it's an image
-  if (file.mimeType.startsWith('image/')) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen">
+          <video
+            key={`${file.id}-${currentIndex}`}
+            ref={videoRef}
+            src={`/file/${file.id}`}
+            muted
+            preload="metadata"
+            className="max-w-full max-h-screen"
+            style={{ maxHeight: 'calc(100vh - 120px)' }}
+            onEnded={onEnded}
+            autoPlay
+          >
+            Your browser does not support the video tag.
+          </video>
+        </div>
+      );
+    }
+
+    if (file.mimeType === 'application/pdf') {
+      const pageDuration = item.pdfPageDurationMs ?? 5000;
+      const docLoops = item.pdfDocumentLoopCount ?? 1;
+      return (
+        <div className="w-full h-screen">
+          <DisplayPDF id={file.id} pageDurationMs={pageDuration} loopCount={docLoops} onComplete={() => setCurrentIndex((i) => (i + 1) % pl.items.length)} />
+        </div>
+      );
+    }
+
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <img
-          src={`/file/${file.id}`}
-          alt={file.name}
-          className="max-w-full max-h-screen object-contain"
-        />
+      <div className="flex flex-col items-center justify-center min-h-screen p-4">
+        <p className="text-gray-600">File type: {file.mimeType}</p>
+        <p className="text-gray-600">Size: {(file.size / 1024).toFixed(2)} KB</p>
       </div>
     );
   }
 
-  // Check if it's a video
-  if (file.mimeType.startsWith('video/')) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <video
-          ref={videoRef}
-          src={`/file/${file.id}`}
-          muted
-          loop
-          preload="metadata"
-          className="max-w-full max-h-screen"
-          style={{ maxHeight: 'calc(100vh - 120px)' }}
-        >
-          Your browser does not support the video tag.
-        </video>
-      </div>
-    );
+  if (playlistQuery.isLoading) {
+    return <div>Loading playlist...</div>;
   }
-
-  // Check if it's a PDF
-  if (file.mimeType === 'application/pdf') {
-    return (
-      <div className="w-full h-screen">
-        <DisplayPDF id={file.id} />
-      </div>
-    );
-  }
-
-  // For non-image/video/PDF files, show file info
-  return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4">
-      <p className="text-gray-600">File type: {file.mimeType}</p>
-      <p className="text-gray-600">Size: {(file.size / 1024).toFixed(2)} KB</p>
-      <p className="text-sm text-gray-500 mt-4">
-        Images, videos, and PDFs are supported for display
-      </p>
-    </div>
-  );
+  return <div>Playlist not found</div>;
 }

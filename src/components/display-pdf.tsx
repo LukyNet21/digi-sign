@@ -1,4 +1,4 @@
-'use clinet'
+'use client'
 
 import { Document, Page, pdfjs } from 'react-pdf';
 import { useEffect, useRef, useState } from "react";
@@ -11,29 +11,38 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url,
 ).toString();
 
-export default function DisplayPDF({ id }: { id: number }) {
+export default function DisplayPDF({ id, pageDurationMs = 5000, loopCount = 1, onComplete }: { id: number; pageDurationMs?: number; loopCount?: number; onComplete?: () => void }) {
   const [numPages, setNumPages] = useState<number>();
   const [pageNumber, setPageNumber] = useState<number>(1);
   const [scale, setScale] = useState<number>(1);
   const [pageDimensions, setPageDimensions] = useState<{ width: number; height: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Page rotation
   useEffect(() => {
-    const interval = setInterval(() => {
-      setPageNumber((prev) =>
-        numPages && prev < numPages ? prev + 1 : 1
-      );
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [numPages]);
+    if (!numPages) return;
+    let pagesShown = 0;
+    const totalPagesToShow = numPages * Math.max(1, loopCount ?? 1);
+    setPageNumber(1);
 
-  // Set number of pages on document load
+    const interval = setInterval(() => {
+      pagesShown += 1;
+      setPageNumber((prev) => {
+        const next = prev < numPages ? prev + 1 : 1;
+        return next;
+      });
+      if (pagesShown >= totalPagesToShow) {
+        clearInterval(interval);
+        onComplete?.();
+      }
+    }, Math.max(500, pageDurationMs));
+
+    return () => clearInterval(interval);
+  }, [numPages, pageDurationMs, loopCount, onComplete]);
+
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
   }
 
-  // Recalculate scale when page dimensions or screen size changes
   useEffect(() => {
     const resize = () => {
       if (!containerRef.current || !pageDimensions) return;
@@ -47,7 +56,7 @@ export default function DisplayPDF({ id }: { id: number }) {
       setScale(scaleToFit);
     };
 
-    resize(); // Initial
+    resize();
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
   }, [pageDimensions]);

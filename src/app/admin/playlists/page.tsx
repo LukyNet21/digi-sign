@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Button } from '~/components/ui/button';
 import { api } from '~/trpc/react';
-import { Trash, Pencil } from 'lucide-react';
+import { Trash, Pencil, Play } from 'lucide-react';
 
 export default function PlaylistsPage() {
   const playlists = api.playlist.list.useQuery();
@@ -11,6 +11,7 @@ export default function PlaylistsPage() {
   const del = api.playlist.delete.useMutation({
     onSuccess: async () => { await utils.playlist.list.invalidate(); }
   });
+  const play = api.player.play.useMutation();
 
   return (
     <div className="p-4 space-y-4">
@@ -28,6 +29,9 @@ export default function PlaylistsPage() {
               {p.description && <div className="text-sm text-gray-500">{p.description}</div>}
             </div>
             <div className="flex gap-2">
+              <Button size="icon" onClick={() => play.mutate({ id: p.id })} disabled={play.isPending}>
+                <Play className="h-4 w-4" />
+              </Button>
               <Button variant="secondary" size="icon" asChild>
                 <Link href={`/admin/playlists/${p.id}`}> <Pencil className="h-4 w-4" /> </Link>
               </Button>

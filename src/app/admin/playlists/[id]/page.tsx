@@ -4,6 +4,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { api, type RouterOutputs } from '~/trpc/react';
 import { useState, useEffect } from 'react';
 import { Button } from '~/components/ui/button';
+import { Play } from 'lucide-react';
 
 type PlaylistGetOutput = RouterOutputs['playlist']['get'];
 type PlaylistItemApi = NonNullable<PlaylistGetOutput>['items'][number];
@@ -24,6 +25,7 @@ export default function EditPlaylistPage() {
   const create = api.playlist.create.useMutation({ onSuccess: (p) => router.replace(`/admin/playlists/${p.id}`) });
   const update = api.playlist.update.useMutation();
   const files = api.media.getFiles.useQuery();
+  const play = api.player.play.useMutation();
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -72,7 +74,14 @@ export default function EditPlaylistPage() {
 
   return (
     <div className="p-4 space-y-4">
-      <h1 className="text-xl font-bold">{id ? 'Edit Playlist' : 'New Playlist'}</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold">{id ? 'Edit Playlist' : 'New Playlist'}</h1>
+        {id && (
+          <Button size="sm" onClick={() => play.mutate({ id })} disabled={play.isPending}>
+            <Play className="h-4 w-4 mr-1" /> Play
+          </Button>
+        )}
+      </div>
       <div className="space-y-2">
         <input className="border px-2 py-1 w-full" placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
         <textarea className="border px-2 py-1 w-full" placeholder="Description" value={description} onChange={e => setDescription(e.target.value)} />

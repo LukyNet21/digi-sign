@@ -3,6 +3,8 @@ import { on } from "events";
 import { EventEmitter } from "stream";
 import z from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { eq } from "drizzle-orm";
+import { playlists } from "~/server/db/schema";
 
 type PlayEvent = {
   id: number;
@@ -30,15 +32,19 @@ export const playerRouter = createTRPCRouter({
         yield tracked(String(event.id), event);
       }
     }),
-  play: publicProcedure.
-    input(z.object({
-      id: z.number()
-    })).mutation(({ input }) => {
+  play: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      // Validate playlist exists
+      const pl = await ctx.db.query.playlists.findFirst({ where: eq(playlists.id, input.id) });
+      if (!pl) throw new Error('Playlist not found');
+
       const event: PlayEvent = {
         id: input.id,
-        startTime: Date.now() + 3000
+        startTime: Date.now() + 3000,
       };
-      lastPlayEvent = event
-      ee.emit('play', event)
+      lastPlayEvent = event;
+      ee.emit('play', event);
+      return { success: true };
     })
 });
