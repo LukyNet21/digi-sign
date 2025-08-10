@@ -9,6 +9,32 @@ const DisplayPDF = dynamic(() => import('~/components/display-pdf'), {
 });
 
 export default function Player() {
+  const [playerId, setPlayerId] = useState<string | null>(null);
+  const connect = api.player.connect.useMutation({
+    onSuccess: (data) => {
+      if (!data?.identifier) return;
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('player_id', data.identifier); } catch {}
+      }
+      setPlayerId(data.identifier);
+    },
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = localStorage.getItem('player_id');
+  if (!connect.isPending) connect.mutate({ identifier: stored ?? undefined });
+    } catch {
+  if (!connect.isPending) connect.mutate();
+    }
+  }, []);
+
+  if (!playerId) return <div>Initializing player</div>;
+  return <MediaPlayer playerID={playerId} />;
+}
+
+function MediaPlayer({ playerID }: { playerID: string }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const subscription = api.player.player.useSubscription(undefined, {
     onError(err) {
@@ -24,13 +50,16 @@ export default function Player() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loopCounter, setLoopCounter] = useState(0); // for playlist video loops
 
-  // Reset index when playlist changes
+  const playlistId = playlistQuery.data?.id;
+  const itemsLen = playlistQuery.data?.items.length ?? 0;
+
+  // Reset index when playlist changes (by id)
   useEffect(() => {
-    if (playlistQuery.data) {
+    if (playlistId) {
       setCurrentIndex(0);
       setLoopCounter(0);
     }
-  }, [playlistQuery.data]);
+  }, [playlistId]);
 
   const currentItem = playlistQuery.data?.items[currentIndex];
   const currentFile = currentItem?.file;
@@ -41,18 +70,15 @@ export default function Player() {
     if (!currentFile.mimeType.startsWith('image/')) return;
     const duration = currentItem.imageDisplayDurationMs ?? 5000;
     const t = setTimeout(() => {
-      setCurrentIndex((i) => {
-        const len = playlistQuery.data?.items.length ?? 0;
-        return len > 0 ? (i + 1) % len : 0;
-      });
+  setCurrentIndex((i) => (itemsLen > 0 ? (i + 1) % itemsLen : 0));
     }, Math.max(500, duration));
     return () => clearTimeout(t);
-  }, [currentIndex, currentItem, currentFile, playlistQuery.data]);
+  }, [currentIndex, currentItem, currentFile, itemsLen]);
 
   // Reset video loop counter when playlist item changes
   useEffect(() => {
-    if (playlistQuery.data) setLoopCounter(0);
-  }, [currentIndex, playlistQuery.data]);
+    if (playlistId) setLoopCounter(0);
+  }, [currentIndex, playlistId]);
 
   if (!playerData) {
     return <div>Waiting for content...</div>;
@@ -62,7 +88,7 @@ export default function Player() {
     const pl = playlistQuery.data;
     const item = pl.items[currentIndex];
 
-  if (!item?.file) {
+    if (!item?.file) {
       return <div>Playlist empty</div>;
     }
 

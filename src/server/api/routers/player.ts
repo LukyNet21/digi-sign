@@ -4,7 +4,8 @@ import { EventEmitter } from "stream";
 import z from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { eq } from "drizzle-orm";
-import { playlists } from "~/server/db/schema";
+import { players, playlists } from "~/server/db/schema";
+import { randomBytes } from "crypto";
 
 type PlayEvent = {
   id: number;
@@ -46,5 +47,45 @@ export const playerRouter = createTRPCRouter({
       lastPlayEvent = event;
       ee.emit('play', event);
       return { success: true };
-    })
+    }),
+  connect: publicProcedure
+    .input(z.object({ identifier: z.string().optional(), name: z.string().optional() }).optional())
+    .mutation(async ({ ctx, input }) => {
+      const identifier = input?.identifier;
+      if (identifier) {
+        const existing = await ctx.db.query.players.findFirst({ where: eq(players.identifier, identifier) });
+        if (existing) return existing;
+      }
+      const [created] = await ctx.db.insert(players).values({
+        name: input?.name ?? 'undefined',
+        identifier: randomBytes(64).toString('hex'),
+      }).returning();
+      return created;
+    }),
+  list: publicProcedure
+    .query(async ({ ctx }) => {
+      const list = await ctx.db.query.players.findMany({ orderBy: (t, { asc }) => [asc(t.name)] });
+      return list;
+    }),
+  get: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const pl = await ctx.db.query.players.findFirst({ where: eq(players.id, input.id) });
+      if (!pl) throw new Error('Player not found');
+      return pl;
+    }),
+  update: publicProcedure
+    .input(z.object({ id: z.number(), name: z.string().min(1), description: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const { id, name, description } = input;
+      const [updated] = await ctx.db.update(players).set({ name, description }).where(eq(players.id, id)).returning();
+      if (!updated) throw new Error('Player not found');
+      return updated;
+    }),
+  delete: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.delete(players).where(eq(players.id, input.id));
+      return { success: true };
+    }),
 });

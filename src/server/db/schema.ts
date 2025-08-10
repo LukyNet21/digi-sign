@@ -79,3 +79,21 @@ export const playlistItems = createTable(
     index('playlist_item_playlist_position_idx').on(t.playlistId, t.position),
   ],
 );
+
+export const players = createTable(
+  'players',
+  (d) => ({
+    id: d.integer({ mode: 'number' }).primaryKey({ autoIncrement: true }),
+    name: d.text({ length: 256 }).notNull(),
+    description: d.text({ length: 1024 }),
+    identifier: d.text({ length: 128 }).notNull(),
+    createdAt: d
+      .integer({ mode: 'timestamp' })
+      .default(sql`(unixepoch())`)
+      .notNull(),
+    updatedAt: d
+      .integer({ mode: 'timestamp' })
+      .$onUpdate(() => new Date()),
+  }),
+  (t) => [index('player_name_idx').on(t.name)],
+);
