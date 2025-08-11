@@ -12,40 +12,46 @@ type PlayEvent = {
   startTime: number;
 };
 
+const activePlayers = new Map<number, PlayEvent>();
 const ee = new EventEmitter();
-let lastPlayEvent: PlayEvent | null = null;
 
 export const playerRouter = createTRPCRouter({
   player: publicProcedure
-    .input(z.object({ lastEventId: z.string().nullish() }).optional())
-    .subscription(async function* ({ input, signal }) {
+    .input(z.object({ lastEventId: z.string().nullish(), identifier: z.string() }))
+    .subscription(async function* ({ input, signal, ctx }) {
+      const p = await ctx.db.query.players.findFirst({ where: eq(players.identifier, input.identifier) });
+      if (!p) throw new Error('Player not found');
+
       // Replay if reconnecting
-      if (input?.lastEventId && lastPlayEvent && Number(input.lastEventId) < lastPlayEvent.id) {
-        yield tracked(String(lastPlayEvent.id), lastPlayEvent);
-      } else if (lastPlayEvent) {
-        yield tracked(String(lastPlayEvent.id), lastPlayEvent);
+      const lastEvent = activePlayers.get(p.id)
+      if (lastEvent) {
+        yield tracked(String(lastEvent.id), lastEvent);
       }
 
       // Stream new events
-      for await (const [data] of on(ee, 'play', { signal })) {
+      for await (const [data] of on(ee, String(p.id), { signal })) {
         const event = data as PlayEvent;
-        lastPlayEvent = event;
         yield tracked(String(event.id), event);
       }
     }),
   play: publicProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ playlistId: z.number(), playerId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       // Validate playlist exists
-      const pl = await ctx.db.query.playlists.findFirst({ where: eq(playlists.id, input.id) });
+      const pl = await ctx.db.query.playlists.findFirst({ where: eq(playlists.id, input.playlistId) });
       if (!pl) throw new Error('Playlist not found');
+      const player = await ctx.db.query.players.findFirst({ where: eq(players.id, input.playerId) });
+      if (!player) throw new Error('Player not found');
 
       const event: PlayEvent = {
-        id: input.id,
+        id: input.playlistId,
         startTime: Date.now() + 3000,
       };
-      lastPlayEvent = event;
-      ee.emit('play', event);
+
+      activePlayers.set(player.id, event);
+
+      ee.emit(String(player.id), event);
+
       return { success: true };
     }),
   connect: publicProcedure

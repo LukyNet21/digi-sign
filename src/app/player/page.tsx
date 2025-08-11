@@ -36,7 +36,7 @@ export default function Player() {
 
 function MediaPlayer({ playerID }: { playerID: string }) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const subscription = api.player.player.useSubscription(undefined, {
+  const subscription = api.player.player.useSubscription({ identifier: playerID }, {
     onError(err) {
       console.error('Subscription error:', err);
     },
