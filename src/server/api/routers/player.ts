@@ -4,7 +4,7 @@ import { EventEmitter } from "stream";
 import z from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { eq } from "drizzle-orm";
-import { players, playlists } from "~/server/db/schema";
+import { players, playlists, playerGroupMembers } from "~/server/db/schema";
 import { randomBytes } from "crypto";
 
 type PlayEvent = {
@@ -51,6 +51,25 @@ export const playerRouter = createTRPCRouter({
       activePlayers.set(player.id, event);
 
       ee.emit(String(player.id), event);
+
+      return { success: true };
+    }),
+  playGroup: publicProcedure
+    .input(z.object({ playlistId: z.number(), groupId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const pl = await ctx.db.query.playlists.findFirst({ where: eq(playlists.id, input.playlistId) });
+      if (!pl) throw new Error('Playlist not found');
+      const members = await ctx.db.query.playerGroupMembers.findMany({ where: eq(playerGroupMembers.groupId, input.groupId) });
+      const playerIds = members.map(m => m.playerId);
+      if (playerIds.length === 0) return { success: true };
+
+      const event: PlayEvent = { id: input.playlistId, startTime: Date.now() + 3000 };
+
+      // Fan out event to all group members
+      for (const pid of playerIds) {
+        activePlayers.set(pid, event);
+        ee.emit(String(pid), event);
+      }
 
       return { success: true };
     }),
